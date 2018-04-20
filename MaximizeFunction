@@ -1,0 +1,365 @@
+import java.util.*;
+/*This function requires a population capable of "coupling", that is, it needs to be an even number population, 
+no "single" chromosomes allowed!
+This function will take a "chromosome" of 10 floating point numbers and return the "best parent", 
+or the parent with the highest "fitness" score after n amount of couplings and re-populations, or "generations" 
+(note, the population stays constant at the user inputted level).
+This function uses a random selection to populate chromosomes of 10 segments.
+A probability wheel is constructed based on "percent fit" of each chromosome.
+The wheel is populated based on each parent probability (weighted for negative minimums) and again,
+a random number assignment chooses parents, with a 95% CI that 80% of the time we are picking the best parents.
+The parents are then given their "mate" based on the order of selection.
+--Note: There may be random situations where parents are polygamous, either due to an error in parentNumber assignment 
+   or the selection process in large data sets at this point. Although in debug, my "remove parent" while loop after the 
+   decision should be mitigating this situation as once a parent is chosen from the list, it is removed from the list. 
+   So it could be the number assignment in the replace method.
+We splice at a random position between 3 and 7. All genes are spliced in at the same location each "generation".
+Post splicing we check for duplicates. Then we mutate at a 1% probability of mutation / segment.
+We calculate child DNA fitness.
+We replace with two "best" children of each generation. The population does not expand/contract.
+ */
+public class MaximizeFunction {
+//Note: see Collections class for shuffle, other methods.
+    public int popsize = 0;
+    public int lastsize = 0;
+    public double totalprob = 0;
+    public  Chromosome c = new Chromosome();
+    public static void main (String[] args) {
+        MaximizeFunction mf = new MaximizeFunction();
+        Chromosome newC = new Chromosome();
+        ArrayList newChrome;
+        ArrayList<Chromosome> parentList = new ArrayList<>();
+        ArrayList<Chromosome> newPL;
+        ArrayList<Integer> probabilityWheel;
+        int i = 0;
+        double totalfit = 0;
+        int percentTotal = 0;
+        int j = 1;
+        int parentNum = 0;
+        Scanner scr = new Scanner(System.in);
+
+        System.out.println("Enter Population Size: ");
+        int popsize = scr.nextInt();
+        mf.popsize = popsize;
+
+
+        while (i < popsize) {
+
+            newC = new Chromosome(mf.populateParentChromosomes(), i + 1);
+            parentNum = i+1;
+            newChrome = newC.parentDNA;
+            newC.fitness = mf.fitFunction(newChrome.get(0), newChrome.get(1), newChrome.get(2), newChrome.get(3), newChrome.get(4),
+                    newChrome.get(5), newChrome.get(6), newChrome.get(7), newChrome.get(8), newChrome.get(9));
+            totalfit += Math.abs(newC.fitness);
+            parentList.add(newC);
+            System.out.print(newC.parentNumber + ".  " + parentList.get(i).parentDNA);
+            System.out.printf("\t ff:  %.2f \n", newC.fitness);
+            i++;
+        }
+        System.out.println("Enter Number of Generations: ");
+        int gens = scr.nextInt();
+
+        while (j <= gens){
+
+            parentList = mf.sortParents(parentList);
+
+            if (parentList.get(0).fitness > 0) {
+                i = 0;
+                while (i < parentList.size()) {
+                    parentList.get(i).percentChance = mf.calculateFitness(parentList.get(i).fitness, totalfit);
+                    percentTotal += parentList.get(i).percentChance;
+                    i++;
+                }
+            }
+            else {
+                i=0;
+                while (i < parentList.size()) {
+                    parentList.get(i).fitness += Math.abs(parentList.get(0).fitness) + 10;
+                    parentList.get(i).percentChance = mf.calculateFitness(parentList.get(i).fitness, totalfit);
+                    percentTotal += parentList.get(i).percentChance;
+                    i++;
+                }
+
+            }
+            System.out.printf(" Gen %d totalpopfit %.2f\n\n", j, totalfit);
+            mf.printParent(parentList);
+            probabilityWheel = mf.createProbabilityWheel(parentList, percentTotal);
+            //mf.printWheel(probabilityWheel);
+            mf.selectMates(probabilityWheel, parentList);
+            newPL = mf.spliceMutateReplace(parentList, parentNum);
+            System.out.println("\nBest parent after repopulation in generation " + i + " is:");
+            mf.printParent(newPL);
+            parentList = newPL;
+            j++;
+        }
+        System.out.println("\nFinal Best Parent is... ");
+        mf.printParent(parentList);
+    }
+
+    public ArrayList populateParentChromosomes () {
+        ArrayList<Double> parentDNA = new ArrayList<>();
+        for (int i = 0; i <10; i++)
+            parentDNA.add((double)i+1);
+        Collections.shuffle(parentDNA);
+        return parentDNA;
+    }
+
+    public double fitFunction(Object x1, Object x2, Object x3, Object x4, Object x5, Object x6, Object x7, Object x8, Object x9, Object x10){
+        double total = 0;
+        total =  (4* Math.pow((Double) x1,2) - 2*(Math.pow((Double) x2, 3)) + 9*(Math.pow((Double) x3,2)) - 11*(Math.pow((Double)x4,2)) + 5*(Math.sqrt((Double)x5)) +
+          (Math.pow(((Double)x6 +(Double)x7), 3)) - 5*(Math.pow((Double)x8, 2)) + 10*(Math.pow(((Double)x9 - (Double)x10), 2)) );
+        return total;
+    }
+
+    public double calculateFitness(double  fitness, double total){
+        double  percentChancePicked = 0;
+        percentChancePicked = (fitness/total)*100;
+        return percentChancePicked;
+    }
+
+    public ArrayList createProbabilityWheel(ArrayList<Chromosome> parentList, double total) {
+        //The "wheel" represents "parent ID" which will replicate per "percent chance + last parent chance".
+
+        ArrayList<Integer> probabilityWheel = new ArrayList<>();
+        int z =0;
+        while(z< parentList.size()){
+            parentList.get(z).probability = (parentList.get(z).fitness)/total;
+            if (parentList.get(z).probability < 1)
+                probabilityWheel.add(parentList.get(z).parentNumber);
+            else {
+                for (int i = 0; i <= Math.ceil(parentList.get(z).probability); i++) {
+                    probabilityWheel.add(parentList.get(z).parentNumber);
+                }
+
+            }
+            z++;
+        }
+        return probabilityWheel;
+    }
+
+    public void selectMates(ArrayList probabilityWheel, ArrayList<Chromosome> pL){
+        ArrayList<Integer> wheel = probabilityWheel;
+        int parentNum = 0;
+        int max = wheel.size();
+        ArrayList <Integer>couples = new ArrayList<>();
+        Random rand = new Random();
+        while (!wheel.isEmpty()) {
+            int wheelpos = rand.nextInt(max);
+            parentNum = wheel.get(wheelpos);
+            while (wheel.contains(parentNum))
+             wheel.remove(wheel.indexOf(parentNum));
+
+            couples.add(parentNum);
+            max = wheel.size();
+        }
+        setCouples(couples, pL);
+    }
+
+    public void setCouples(ArrayList couples, ArrayList<Chromosome> pL){
+        int j = 0;
+        int i = 0;
+        Chromosome c;
+
+        while (i <couples.size()-1) {
+            while (j < pL.size()) {
+                c = pL.get(j);
+                if (c.parentNumber == (int) couples.get(i))
+                    c.mate = (int) couples.get(i + 1);
+
+                j+=2;
+            }
+            j = 0;
+            while (j < pL.size()) {
+                c = pL.get(j);
+                if (c.parentNumber == (int)couples.get(i + 1))
+                    c.mate = (int)couples.get(i);
+
+                j++;
+            }
+            i++;
+            j = 0;
+        }
+    }
+
+    public ArrayList<Chromosome> spliceMutateReplace(ArrayList<Chromosome> pL, int pN){
+        ArrayList<Chromosome> children = new ArrayList<>();
+        Chromosome child;
+        Chromosome c;
+
+        ArrayList<Double> newStrand = new ArrayList<>();
+        ArrayList<Double> childStrand;
+        Random rand = new Random();
+        int splicepos;
+        int doSplice;
+        int j = 0;
+        splicepos = rand.nextInt(4) + 3;
+
+        while (j < pL.size()) {
+            doSplice = rand.nextInt(9) + 1;
+            newStrand = new ArrayList<>();
+            Chromosome ch = new Chromosome();
+            pN++;
+            if (doSplice <= 8) {
+                c = pL.get(j);
+                newStrand.addAll(c.parentDNA.subList(0, splicepos));
+
+                int hold;
+                hold = pL.get(j).mate;
+                for (int i = 0; i < pL.size(); i++) {
+                    if (pL.get(i).parentNumber == hold)
+                        ch = pL.get(i);
+                }
+                newStrand.addAll(ch.parentDNA.subList(splicepos, ch.parentDNA.size()));
+
+                childStrand = newStrand;
+                System.out.println("newStrand is " + childStrand);
+                childStrand = checkForDuplicates(newStrand, splicepos);
+                childStrand = mutate(childStrand);
+                child = new Chromosome(childStrand, pN);
+                newStrand = childStrand;
+                child.fitness = fitFunction(newStrand.get(0), newStrand.get(1), newStrand.get(2), newStrand.get(3), newStrand.get(4),
+                                            newStrand.get(5), newStrand.get(6), newStrand.get(7), newStrand.get(8), newStrand.get(9));
+                children.add(child);
+            }
+            else{
+                childStrand = pL.get(j).parentDNA;
+                childStrand = mutate(childStrand);
+                child = new Chromosome(childStrand, pN);
+                newStrand = childStrand;
+                child.fitness = fitFunction(newStrand.get(0), newStrand.get(1), newStrand.get(2), newStrand.get(3), newStrand.get(4),
+                                            newStrand.get(5), newStrand.get(6), newStrand.get(7), newStrand.get(8), newStrand.get(9));
+                children.add(child);
+            }
+
+
+            j++;
+        }
+        for (int z = 0; z < children.size(); z++)
+            System.out.printf(" %d c  ff: %.2f\n %s",children.get(z).parentNumber, children.get(z).fitness, children.get(z).parentDNA);
+
+        pL = replace(pL, children);
+        return pL;
+    }
+
+    public ArrayList checkForDuplicates(ArrayList strand,int sp ){
+        Random rand = new Random();
+        Chromosome c = new Chromosome();
+        double newNum;
+        Chromosome d = new Chromosome();
+        int i = 0;
+        int min = 1;
+        int max = 9;
+//do for loop to put "not numbers in parentDNA" in list then choose from list.
+        for (int z = 0; z < strand.size(); z++){
+            if (strand.indexOf((double)z+1) == -1)
+                d.parentDNA.add((double)z+1);
+        }
+        c.parentDNA = strand;
+        while (i<strand.size()) {
+            if (!d.parentDNA.isEmpty()) {
+                newNum = c.parentDNA.get(i);
+                c.parentDNA.remove(i);
+                if (c.parentDNA.indexOf(newNum) == -1) {
+                    c.parentDNA.add(i, newNum);
+                } else {
+                    newNum = d.parentDNA.get(0);
+                    d.parentDNA.remove(0);
+                    c.parentDNA.add(i, newNum);
+                }
+            }
+            i++;
+        }
+
+
+        return c.parentDNA;
+
+    }
+
+    public ArrayList mutate(ArrayList strand){
+        Random rand = new Random();
+        int mutate = 0;
+        int mutatepos;
+        int i = 0;
+        double hold;
+        while (i < strand.size()) {
+            mutate = rand.nextInt(99) + 1;
+            if (mutate == 1) {
+                hold = (double) strand.get(i);
+                mutatepos = rand.nextInt(9);
+                System.out.println("Mutation occuriendo a segment!! " + mutatepos);
+                strand.add(i, strand.get(mutatepos));
+                strand.remove(i+1);
+                strand.add(mutatepos, hold);
+                strand.remove(mutatepos+1);
+
+            }
+            i++;
+        }
+        return strand;
+    }
+
+    public ArrayList<Chromosome> sortParents(ArrayList<Chromosome> pL) {
+        Collections.sort(pL, (Chromosome p1, Chromosome p2) -> {
+            return (int)(p1.fitness - p2.fitness);
+        });
+       return pL;
+    }
+
+    public void  getbestfitChildren(ArrayList<Chromosome> children) {
+
+
+       ArrayList<Chromosome> bfc = children;
+
+           Collections.sort(children, ( Chromosome child1,Chromosome child2) -> {
+               return (int) (child2.fitness - child1.fitness);
+           });
+
+
+
+    }
+
+    public ArrayList<Chromosome> replace(ArrayList<Chromosome> pL, ArrayList<Chromosome> children){
+        getbestfitChildren(children);
+        sortParents(pL);
+        Chromosome c = pL.get(0);
+        Chromosome d = children.get(0);
+        c.parentDNA = d.parentDNA;
+        c.parentNumber = d.parentNumber;
+        c.fitness = d.fitness;
+        c = pL.get(1);
+        d = children.get(1);
+        c.parentDNA = d.parentDNA;
+        c.parentNumber = d.parentNumber;
+        c.fitness = d.fitness;
+
+
+        return pL;
+    }
+
+    public void printParent(ArrayList<Chromosome> pL){
+        Collections.sort(pL, (Chromosome p1, Chromosome p2) -> {
+            return (int) (p2.fitness - p1.fitness);
+        });
+        System.out.printf("Parent %d \n   ff: %.4f\n %s\n", pL.get(0).parentNumber, pL.get(0).fitness, pL.get(0).parentDNA);
+    }
+
+    public void printWheel(ArrayList  wheel){
+        int j = 0;
+        int k = 0;
+        System.out.println("wheel size in print: " + wheel.size() );
+        while (j < wheel.size()){
+            if(k<10) {
+                System.out.printf("%d\t", wheel.get(j));
+                k++;
+                j++;
+            }
+            else {
+                System.out.println();
+                k = 0;
+            }
+
+
+        }
+    }
+
+}
